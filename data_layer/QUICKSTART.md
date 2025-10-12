@@ -90,6 +90,9 @@ docker-compose ps
 # Method 1: Using docker exec (recommended)
 docker exec -i dbank_postgres psql -U dbank_user -d dbank < data_layer/sql/01_create_schema.sql
 
+# powershell
+Get-Content data_layer/sql/01_create_schema.sql | docker exec -i dbank_postgres psql -U dbank_user -d dbank
+
 # Method 2: Using psql directly (if installed locally)
 psql -h localhost -U dbank_user -d dbank -f data_layer/sql/01_create_schema.sql
 # Password: dbank_pass_2025
@@ -119,7 +122,9 @@ python3.11 -m venv .venv
 # Activate it
 # On Mac/Linux:
 source .venv/bin/activate
+
 # On Windows:
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 .venv\Scripts\activate
 
 # Install packages
@@ -168,7 +173,7 @@ python data_layer/scripts/generate_sample_data.py
 
 **Check the files:**
 ```bash
-ls -lh data_layer/sample_data
+ls data_layer/sample_data
 # You should see 8 CSV files
 ```
 
