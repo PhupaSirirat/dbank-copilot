@@ -15,6 +15,7 @@ env/
 dbt_modules/
 dbt_packages/
 target/
+/dbt_project/logs
 
 # Sample data
 /data_layer/sample_data
