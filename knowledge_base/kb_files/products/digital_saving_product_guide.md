@@ -190,11 +190,3 @@ A: Yes, full app access worldwide. However, some countries may have IP restricti
 **Email:** support@dbank.co.th  
 **In-App Chat:** Available in app (fastest response)  
 **Average Response Time:** 5 minutes (chat), 2 hours (email)
-
----
-
-## Related Documents
-- [Digital Lending Product Guide](digital_lending_product_guide.md)
-- [v1.2 Release Notes & Known Issues](v1.2_release_notes.md)
-- [Troubleshooting Guide](troubleshooting_guide.md)
-- [Customer Policies](customer_policies.md)

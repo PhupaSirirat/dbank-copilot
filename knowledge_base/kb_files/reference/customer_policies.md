@@ -446,11 +446,3 @@
 
 **Office Hours:** Mon-Fri, 9 AM - 6 PM (Bangkok time)  
 **Emergency:** 24/7 hotline 1-800-DBANK
-
----
-
-## Related Documents
-- [Privacy Policy (Full Version)](privacy_policy_full.md)
-- [Terms of Service](terms_of_service.md)
-- [v1.2 Compensation Details](v1.2_release_notes.md#compensation-summary)
-- [Security Best Practices](security_guide.md)

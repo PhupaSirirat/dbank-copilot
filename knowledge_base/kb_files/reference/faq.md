@@ -287,16 +287,6 @@ A: Most customers received it in September 2024. If still pending, contact suppo
 
 ---
 
-## 📚 Related Documents
-
-- [Digital Saving Guide](digital_saving_product_guide.md)
-- [Digital Lending Guide](digital_lending_product_guide.md)
-- [v1.2 Release Notes](v1.2_release_notes.md)
-- [Troubleshooting Guide](troubleshooting_guide.md)
-- [Customer Policies](customer_policies.md)
-
----
-
 ## 💡 Still Have Questions?
 
 **Contact us:**  

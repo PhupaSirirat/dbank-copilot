@@ -623,11 +623,3 @@
 **For v1.2 Issues:**  
 Priority hotline: 1-800-DBANKV12  
 Email: v12support@dbank.co.th
-
----
-
-## Related Documents
-- [v1.2 Release Notes](v1.2_release_notes.md)
-- [Digital Saving Guide](digital_saving_product_guide.md)
-- [Digital Lending Guide](digital_lending_product_guide.md)
-- [FAQ](faq.md)

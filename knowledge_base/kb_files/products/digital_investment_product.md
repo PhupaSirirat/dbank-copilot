@@ -392,11 +392,3 @@ A: Currently Thai citizens only. NRI/OCI under consideration.
 **Email:** invest@dbank.co.th  
 **In-App:** Chat with advisor  
 **Consultation:** Free 30-minute session
-
----
-
-## Related Documents
-- [Digital Saving Guide](digital_saving_product_guide.md)
-- [Product Comparison Guide](product_comparison_guide.md)
-- [Customer Policies](customer_policies.md)
-- [FAQ](faq.md)
