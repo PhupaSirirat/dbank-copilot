@@ -7,7 +7,7 @@ profile: 'dbank'
 
 model-paths: ["models"]
 analysis-paths: ["analyses"]
-test-paths: ["tests"]
+test-paths: ["data_tests"]
 seed-paths: ["seeds"]
 macro-paths: ["macros"]
 snapshot-paths: ["snapshots"]
@@ -24,25 +24,11 @@ models:
       +materialized: view
       +schema: staging
       
-    # Intermediate models - materialized as views
-    intermediate:
-      +materialized: view
-      +schema: intermediate
-      
     # Mart models - materialized as tables for performance
     marts:
       +materialized: table
       +schema: marts
-      
-    # KPI models - incremental for efficiency
-    kpis:
-      +materialized: incremental
-      +schema: kpis
 
-# Seeds configuration
-seeds:
-  dbank_analytics:
-    +schema: seeds
 
 # Test configurations
 tests:
