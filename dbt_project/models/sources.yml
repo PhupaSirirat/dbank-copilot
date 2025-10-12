@@ -1,0 +1,132 @@
+# models/sources.yml
+version: 2
+
+sources:
+  - name: analytics
+    description: Main analytics schema with dimensions and facts
+    database: dbank
+    schema: analytics
+    tables:
+      - name: dim_customers
+        description: Customer dimension with PII fields
+        columns:
+          - name: customer_id
+            description: Primary key
+            tests:
+              - unique
+              - not_null
+          - name: customer_uuid
+            description: Business key
+            tests:
+              - unique
+              - not_null
+          - name: email
+            description: PII - Must be masked in outputs
+            tests:
+              - not_null
+          - name: account_status
+            tests:
+              - accepted_values:
+                  values: ['Active', 'Suspended', 'Closed']
+                  
+      - name: dim_products
+        description: Product dimension
+        columns:
+          - name: product_id
+            tests:
+              - unique
+              - not_null
+          - name: product_code
+            tests:
+              - unique
+              - not_null
+              
+      - name: dim_ticket_categories
+        description: Ticket category dimension
+        columns:
+          - name: category_id
+            tests:
+              - unique
+              - not_null
+              
+      - name: dim_root_causes
+        description: Root cause dimension
+        columns:
+          - name: root_cause_id
+            tests:
+              - unique
+              - not_null
+          - name: severity
+            tests:
+              - accepted_values:
+                  values: ['Critical', 'High', 'Medium', 'Low']
+                  
+      - name: dim_time
+        description: Time dimension
+        columns:
+          - name: date_id
+            tests:
+              - unique
+              - not_null
+          - name: date
+            tests:
+              - unique
+              - not_null
+              
+      - name: fact_tickets
+        description: Support tickets fact table
+        columns:
+          - name: ticket_id
+            tests:
+              - unique
+              - not_null
+          - name: customer_id
+            tests:
+              - not_null
+              - relationships:
+                  to: source('analytics', 'dim_customers')
+                  field: customer_id
+          - name: product_id
+            tests:
+              - not_null
+              - relationships:
+                  to: source('analytics', 'dim_products')
+                  field: product_id
+          - name: created_date
+            tests:
+              - not_null
+          - name: ticket_status
+            tests:
+              - accepted_values:
+                  values: ['Open', 'In Progress', 'Resolved', 'Closed']
+                  
+      - name: fact_logins
+        description: Customer login activity
+        columns:
+          - name: login_id
+            tests:
+              - unique
+              - not_null
+          - name: customer_id
+            tests:
+              - not_null
+              - relationships:
+                  to: source('analytics', 'dim_customers')
+                  field: customer_id
+          - name: login_date
+            tests:
+              - not_null
+              
+      - name: fact_customer_products
+        description: Customer product holdings
+        columns:
+          - name: holding_id
+            tests:
+              - unique
+              - not_null
+          - name: customer_id
+            tests:
+              - not_null
+          - name: product_id
+            tests:
+              - not_null

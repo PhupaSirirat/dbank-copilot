@@ -1,0 +1,51 @@
+# dbt_project.yml
+name: 'dbank_analytics'
+version: '1.0.0'
+config-version: 2
+
+profile: 'dbank'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  dbank_analytics:
+    # Staging models - materialized as views
+    staging:
+      +materialized: view
+      +schema: staging
+      
+    # Intermediate models - materialized as views
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+      
+    # Mart models - materialized as tables for performance
+    marts:
+      +materialized: table
+      +schema: marts
+      
+    # KPI models - incremental for efficiency
+    kpis:
+      +materialized: incremental
+      +schema: kpis
+
+# Seeds configuration
+seeds:
+  dbank_analytics:
+    +schema: seeds
+
+# Test configurations
+tests:
+  dbank_analytics:
+    +store_failures: true
+    +schema: test_results
