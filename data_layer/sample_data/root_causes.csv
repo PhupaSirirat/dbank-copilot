@@ -1,9 +1,0 @@
-root_cause_code,root_cause_name,category,severity
-RC001,App Version Bug (v1.2),Technical,Critical
-RC002,Database Timeout,Technical,High
-RC003,User Error - Wrong Password,User,Low
-RC004,API Gateway Error,Technical,High
-RC005,KYC Document Expired,Compliance,Medium
-RC006,Network Connectivity,Technical,Medium
-RC007,Insufficient Balance,Business,Low
-RC008,Third Party Payment Gateway Down,External,Critical

@@ -1,9 +1,0 @@
-product_code,product_name,product_category,product_type,launch_date,is_active,description
-DS001,dSave Plus,Savings,Digital Saving,2023-01-15,True,dSave Plus - Digital Saving
-DS002,dSave Premium,Savings,Digital Saving,2023-06-20,True,dSave Premium - Digital Saving
-DL001,dLoan Quick,Lending,Digital Lending,2023-03-10,True,dLoan Quick - Digital Lending
-DL002,dLoan Flexi,Lending,Digital Lending,2023-08-05,True,dLoan Flexi - Digital Lending
-DI001,dInvest Auto,Investment,Digital Investment,2023-02-28,True,dInvest Auto - Digital Investment
-DI002,dInvest Pro,Investment,Digital Investment,2024-01-15,True,dInvest Pro - Digital Investment
-DIN001,dProtect Basic,Insurance,Digital Insurance,2023-05-10,True,dProtect Basic - Digital Insurance
-DIN002,dProtect Plus,Insurance,Digital Insurance,2023-11-20,True,dProtect Plus - Digital Insurance

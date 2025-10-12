@@ -17,7 +17,7 @@ dbt_packages/
 target/
 
 # Sample data
-data_layer/sample_data/
+/data_layer/sample_data
 
 # IDE
 .vscode/
