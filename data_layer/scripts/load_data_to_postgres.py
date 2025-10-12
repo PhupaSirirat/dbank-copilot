@@ -15,13 +15,13 @@ load_dotenv()
 # Database connection
 DB_CONFIG = {
     'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
+    'port': os.getenv('DB_PORT', '5433'),
     'database': os.getenv('DB_NAME', 'dbank'),
     'user': os.getenv('DB_USER', 'dbank_user'),
     'password': os.getenv('DB_PASSWORD', 'dbank_pass_2025')
 }
 
-DATA_DIR = 'sample_data'
+DATA_DIR = 'data_layer/sample_data'
 
 def get_connection():
     """Create database connection"""

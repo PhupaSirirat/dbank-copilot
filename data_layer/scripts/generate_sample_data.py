@@ -76,7 +76,7 @@ for i in range(NUM_CUSTOMERS):
         'customer_uuid': fake.uuid4(),
         'full_name': fake.name(),
         'email': fake.email(),
-        'phone': fake.phone_number(),
+        'phone': fake.phone_number()[:20],
         'national_id': fake.ssn(),
         'date_of_birth': fake.date_of_birth(minimum_age=18, maximum_age=80),
         'gender': random.choice(['Male', 'Female', 'Other']),

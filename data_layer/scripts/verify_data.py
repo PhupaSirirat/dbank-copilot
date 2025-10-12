@@ -12,7 +12,7 @@ load_dotenv()
 
 DB_CONFIG = {
     'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
+    'port': os.getenv('DB_PORT', '5433'),
     'database': os.getenv('DB_NAME', 'dbank'),
     'user': os.getenv('DB_USER', 'dbank_user'),
     'password': os.getenv('DB_PASSWORD', 'dbank_pass_2025')
@@ -47,11 +47,11 @@ def main():
     run_query("""
         SELECT 
             schemaname, 
-            tablename, 
-            n_tup_ins as row_count
+            relname as tablename, 
+            n_live_tup as row_count
         FROM pg_stat_user_tables
         WHERE schemaname IN ('analytics', 'staging', 'vector_store')
-        ORDER BY schemaname, tablename;
+        ORDER BY schemaname, relname;
     """, "Test 1: Table Row Counts")
     
     # Test 2: Top 5 root causes (sample query from requirements)
@@ -100,17 +100,25 @@ def main():
     
     # Test 5: Churned customers (no login in 30 days)
     run_query("""
+        WITH last_logins AS (
+            SELECT 
+                c.customer_id,
+                c.customer_segment,
+                MAX(l.login_date) as last_login_date
+            FROM analytics.dim_customers c
+            LEFT JOIN analytics.fact_logins l ON c.customer_id = l.customer_id
+            WHERE c.account_status = 'Active'
+            GROUP BY c.customer_id, c.customer_segment
+        )
         SELECT 
-            c.customer_segment,
-            COUNT(DISTINCT c.customer_id) as customer_count,
-            ROUND(AVG(CURRENT_DATE - MAX(l.login_date)), 2) as avg_days_since_login
-        FROM analytics.dim_customers c
-        LEFT JOIN analytics.fact_logins l ON c.customer_id = l.customer_id
-        WHERE c.account_status = 'Active'
-        GROUP BY c.customer_segment
-        HAVING MAX(l.login_date) < CURRENT_DATE - INTERVAL '30 days' 
-            OR MAX(l.login_date) IS NULL
-        ORDER BY customer_count DESC;
+            customer_segment,
+            COUNT(*) as churned_customers,
+            ROUND(AVG(CURRENT_DATE - last_login_date), 2) as avg_days_since_login
+        FROM last_logins
+        WHERE last_login_date < CURRENT_DATE - INTERVAL '30 days' 
+            OR last_login_date IS NULL
+        GROUP BY customer_segment
+        ORDER BY churned_customers DESC;
     """, "Test 5: Churned Customers (No Login 30+ Days)")
     
     # Test 6: Data quality - check for nulls in critical fields
@@ -146,15 +154,6 @@ def main():
         FROM analytics.dim_customers
         LIMIT 3;
     """, "Test 7: Sample Customer Data (PII Fields Present)")
-    
-    print("\n" + "=" * 60)
-    print("✅ Verification Complete!")
-    print("=" * 60)
-    print("\n💡 Next Steps:")
-    print("   1. Data layer is ready ✓")
-    print("   2. Next: Set up dbt for transformations")
-    print("   3. Then: Build knowledge base and vector store")
-    print("   4. Finally: Create MCP tools and RAG system")
 
 if __name__ == "__main__":
     main()
