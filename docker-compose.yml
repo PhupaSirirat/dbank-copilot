@@ -3,9 +3,9 @@ services:
     image: pgvector/pgvector:pg16
     container_name: dbank_postgres
     environment:
-      POSTGRES_USER: dbank_user
-      POSTGRES_PASSWORD: dbank_pass_2025
-      POSTGRES_DB: dbank
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5433:5432"
     volumes:
