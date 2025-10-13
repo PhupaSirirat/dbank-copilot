@@ -40,3 +40,6 @@ redis==5.0.1
 
 # Monitoring & Logging
 prometheus-client==0.20.0
+
+# Additional utilities
+python-multipart==0.0.6
