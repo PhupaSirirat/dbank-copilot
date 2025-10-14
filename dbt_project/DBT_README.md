@@ -118,9 +118,7 @@ SELECT
     total_tickets,
     pct_of_period,
     pct_open
-FROM marts.mart_top_root_causes
-WHERE created_year = 2024 
-    AND created_month = 10
+FROM analytics_marts.mart_top_root_causes
 ORDER BY total_tickets DESC
 LIMIT 5;
 ```
@@ -134,9 +132,7 @@ SELECT
     COUNT(*) as daily_tickets,
     SUM(CASE WHEN is_v12_related THEN 1 ELSE 0 END) as v12_tickets,
     STRING_AGG(DISTINCT product_type, ', ') as affected_products
-FROM marts.mart_ticket_analytics
-WHERE created_year = 2024 
-    AND created_month >= 8
+FROM analytics_marts.mart_ticket_analytics
 GROUP BY ticket_created_date
 HAVING SUM(CASE WHEN is_v12_related THEN 1 ELSE 0 END) > 0
 ORDER BY ticket_created_date;
@@ -154,7 +150,7 @@ SELECT
     total_products,
     total_balance,
     churn_risk_level
-FROM marts.mart_churned_customers
+FROM analytics_marts.mart_churned_customers
 WHERE is_churned_30d = true
 ORDER BY estimated_clv DESC;
 
@@ -166,7 +162,7 @@ SELECT
     total_products,
     total_balance,
     churn_risk_level
-FROM marts.mart_churned_customers
+FROM analytics_marts.mart_churned_customers
 WHERE is_churned_90d = true
 ORDER BY estimated_clv DESC;
 ```
@@ -337,10 +333,10 @@ dbt doesn't create indexes by default. Add them manually:
 ```sql
 -- In migrations or post-hooks
 CREATE INDEX idx_mart_tickets_date 
-ON marts.mart_ticket_analytics(created_date);
+ON analytics_marts.mart_ticket_analytics(created_date);
 
 CREATE INDEX idx_mart_churn_risk 
-ON marts.mart_churned_customers(churn_risk_level);
+ON analytics_marts.mart_churned_customers(churn_risk_level);
 ```
 
 ---
