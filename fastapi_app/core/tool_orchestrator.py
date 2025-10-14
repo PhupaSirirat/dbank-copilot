@@ -3,7 +3,8 @@ Tool Orchestrator - Manages MCP tool calls for dBank Support Copilot
 """
 import httpx
 import time
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from datetime import datetime
 
 from models.schemas import ToolCall, Citation
 
@@ -22,87 +23,84 @@ class ToolOrchestrator:
         """
         return [
             {
-            "name": "sql.query",
-            "description": """Execute read-only SQL queries on the dBank analytics warehouse. 
-            Use for analyzing tickets, customers, login patterns, and product data. 
-            Available tables: dim_customers, dim_products, dim_ticket_categories, dim_root_causes, dim_time, fact_tickets, fact_customer_products, fact_logins.
-            All queries are logged and PII is automatically masked.""",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                "query": {
-                    "type": "string",
-                    "description": """SQL query to execute. Must be SELECT only (read-only).
-                    Tables available:
-                    - dim_customers: customer_id, name, email, segment, region, signup_date
-                    - dim_products: product_id, name, category, version
-                    - dim_ticket_categories: category_id, name
-                    - dim_root_causes: root_cause_id, description
-                    - dim_time: date_id, date, week, month, year
-                    - fact_tickets: ticket_id, customer_id, product_id, category_id, status, priority, root_cause_id, created_at, resolved_at
-                    - fact_customer_products: customer_id, product_id, subscribed_at
-                    - fact_logins: access_id, customer_id, login_date, device_type"""
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Maximum number of rows to return (default: 100, max: 1000)",
-                    "default": 100
+                "name": "sql_query",
+                "description": """Execute read-only SQL queries on the dBank support database. 
+                Use for analyzing tickets, customers, login patterns, and product data. 
+                Available tables: customers, tickets, login_access, products, customer_products.
+                All queries are logged and PII is automatically masked.""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": """SQL query to execute. Must be SELECT only (read-only).
+                            Tables available:
+                            - customers: customer_id, name, email, segment, region, signup_date
+                            - tickets: ticket_id, customer_id, product_id, category, status, priority, root_cause, created_at, resolved_at
+                            - login_access: access_id, customer_id, login_date, device_type
+                            - products: product_id, name, category, version
+                            - customer_products: customer_id, product_id, subscribed_at"""
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of rows to return (default: 100, max: 1000)",
+                            "default": 100
+                        }
+                    },
+                    "required": ["query"]
                 }
-                },
-                "required": ["query"]
-            }
             },
             {
-            "name": "kb.search",
-            "description": """Search the dBank knowledge base for product documentation, known issues, 
-            policies, release notes, and troubleshooting guides. Use when users ask about 
-            'what is', 'how to', 'known issues', or need documentation.""",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query for knowledge base (e.g., 'Digital Lending approval delays', 'app v1.2 known issues')"
-                },
-                "top_k": {
-                    "type": "integer",
-                    "description": "Number of results to return (default: 5, max: 20)",
-                    "default": 5
+                "name": "kb_search",
+                "description": """Search the dBank knowledge base for product documentation, known issues, 
+                policies, release notes, and troubleshooting guides. Use when users ask about 
+                'what is', 'how to', 'known issues', or need documentation.""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query for knowledge base (e.g., 'Digital Lending approval delays', 'app v1.2 known issues')"
+                        },
+                        "top_k": {
+                            "type": "integer",
+                            "description": "Number of results to return (default: 5, max: 20)",
+                            "default": 5
+                        }
+                    },
+                    "required": ["query"]
                 }
-                },
-                "required": ["query"]
-            }
             },
             {
-            "name": "kpi.top_root_causes",
-            "description": """Calculate top 5 root causes of support tickets by category 
-            with percentage of open tickets. Use for root cause analysis, pattern identification, 
-            and periodic reports (daily, weekly, monthly).""",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                "start_date": {
-                    "type": "string",
-                    "description": "Start date for analysis (YYYY-MM-DD format)",
-                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
-                },
-                "end_date": {
-                    "type": "string",
-                    "description": "End date for analysis (YYYY-MM-DD format)",
-                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
-                },
-                "category": {
-                    "type": "string",
-                    "description": "Optional: Filter by product category (e.g., 'Digital Saving', 'Digital Lending', 'Payment')"
-                },
-                "top_n": {
-                    "type": "integer",
-                    "description": "Number of top root causes to return (default: 5)",
-                    "default": 5
+                "name": "kpi_top_root_causes",
+                "description": """Calculate top 5 root causes of support tickets by category 
+                with percentage of open tickets. Use for root cause analysis, pattern identification, 
+                and periodic reports (daily, weekly, monthly).""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "start_date": {
+                            "type": "string",
+                            "description": "Start date for analysis (YYYY-MM-DD format)",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                        },
+                        "end_date": {
+                            "type": "string",
+                            "description": "End date for analysis (YYYY-MM-DD format)",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                        },
+                        "category": {
+                            "type": "string",
+                            "description": "Optional: Filter by product category (e.g., 'Digital Saving', 'Digital Lending', 'Payment')"
+                        },
+                        "top_n": {
+                            "type": "integer",
+                            "description": "Number of top root causes to return (default: 5)",
+                            "default": 5
+                        }
+                    },
+                    "required": ["start_date", "end_date"]
                 }
-                },
-                "required": ["start_date", "end_date"]
-            }
             }
         ]
     
@@ -115,7 +113,7 @@ class ToolOrchestrator:
         Execute a single tool call
         
         Args:
-            tool_name: Name of the tool (sql.query, kb.search, kpi.top_root_causes)
+            tool_name: Name of the tool (sql_query, kb_search, kpi_top_root_causes)
             arguments: Tool arguments
         
         Returns:
@@ -131,9 +129,9 @@ class ToolOrchestrator:
         try:
             # Map tool names to MCP server endpoints
             endpoint_map = {
-                "sql.query": "/tools/call",
-                "kb.search": "/tools/call",
-                "kpi.top_root_causes": "/tools/call"  # Maps to existing KPI tool
+                "sql_query": "/tools/sql_query",
+                "kb_search": "/tools/kb_search",
+                "kpi_top_root_causes": "/tools/kpi_aggregate"  # Maps to existing KPI tool
             }
             
             if tool_name not in endpoint_map:
@@ -142,8 +140,8 @@ class ToolOrchestrator:
             endpoint = endpoint_map[tool_name]
             url = f"{self.mcp_server_url}{endpoint}"
             
-            # Special handling for kpi.top_root_causes
-            if tool_name == "kpi.top_root_causes":
+            # Special handling for kpi_top_root_causes
+            if tool_name == "kpi_top_root_causes":
                 # Convert to KPI aggregate format
                 kpi_arguments = {
                     "kpi_name": "top_root_causes",
@@ -219,7 +217,7 @@ class ToolOrchestrator:
                 continue
             
             # Extract citations based on tool type
-            if tool_call.tool_name == "kb.search":
+            if tool_call.tool_name == "kb_search":
                 # Knowledge base citations
                 if tool_call.result and "results" in tool_call.result:
                     for item in tool_call.result["results"]:
@@ -231,7 +229,7 @@ class ToolOrchestrator:
                             metadata=item.get("metadata")
                         ))
             
-            elif tool_call.tool_name == "sql.query":
+            elif tool_call.tool_name == "sql_query":
                 # SQL query citations
                 if tool_call.result and "rows" in tool_call.result:
                     row_count = len(tool_call.result["rows"])
@@ -245,7 +243,7 @@ class ToolOrchestrator:
                         }
                     ))
             
-            elif tool_call.tool_name == "kpi.top_root_causes":
+            elif tool_call.tool_name == "kpi_top_root_causes":
                 # KPI root cause citations
                 if tool_call.result:
                     citations.append(Citation(
