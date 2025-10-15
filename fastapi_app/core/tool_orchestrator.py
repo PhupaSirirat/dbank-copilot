@@ -24,9 +24,10 @@ class ToolOrchestrator:
         return [
             {
                 "name": "sql_query",
-                "description": """Execute read-only SQL queries on the dBank support database. 
+                "description": """Execute read-only SQL queries on the dBank analytics warehouse. 
                 Use for analyzing tickets, customers, login patterns, and product data. 
-                Available tables: customers, tickets, login_access, products, customer_products.
+                Available tables: dim_customers, dim_products, dim_ticket_categories, dim_root_causes, dim_time, 
+                fact_tickets, fact_customer_products, fact_logins.
                 All queries are logged and PII is automatically masked.""",
                 "parameters": {
                     "type": "object",
@@ -35,11 +36,14 @@ class ToolOrchestrator:
                             "type": "string",
                             "description": """SQL query to execute. Must be SELECT only (read-only).
                             Tables available:
-                            - customers: customer_id, name, email, segment, region, signup_date
-                            - tickets: ticket_id, customer_id, product_id, category, status, priority, root_cause, created_at, resolved_at
-                            - login_access: access_id, customer_id, login_date, device_type
-                            - products: product_id, name, category, version
-                            - customer_products: customer_id, product_id, subscribed_at"""
+                            - dim_customers: customer_id, name, email, segment, region, signup_date
+                            - dim_products: product_id, name, category, version
+                            - dim_ticket_categories: category_id, name
+                            - dim_root_causes: root_cause_id, description
+                            - dim_time: date_id, date, year, month, day
+                            - fact_tickets: ticket_id, customer_id, product_id, category_id, status, priority, root_cause_id, created_at, resolved_at
+                            - fact_customer_products: customer_id, product_id, subscribed_at
+                            - fact_logins: access_id, customer_id, login_date, device_type"""
                         },
                         "limit": {
                             "type": "integer",
@@ -72,8 +76,9 @@ class ToolOrchestrator:
                 }
             },
             {
+                # Use function-name-safe identifier (no dots) for model function calling
                 "name": "kpi_top_root_causes",
-                "description": """Calculate top 5 root causes of support tickets by category 
+                "description": """Calculate top root causes of support tickets by category 
                 with percentage of open tickets. Use for root cause analysis, pattern identification, 
                 and periodic reports (daily, weekly, monthly).""",
                 "parameters": {
@@ -113,7 +118,7 @@ class ToolOrchestrator:
         Execute a single tool call
         
         Args:
-            tool_name: Name of the tool (sql_query, kb_search, kpi_top_root_causes)
+            tool_name: Name of the tool (sql.query, kb.search, kpi.top_root_causes)
             arguments: Tool arguments
         
         Returns:
@@ -127,40 +132,74 @@ class ToolOrchestrator:
         )
         
         try:
-            # Map tool names to MCP server endpoints
-            endpoint_map = {
-                "sql_query": "/tools/sql_query",
-                "kb_search": "/tools/kb_search",
-                "kpi_top_root_causes": "/tools/kpi_aggregate"  # Maps to existing KPI tool
+            # Map internal function-safe names to MCP tool ids
+            mcp_tool_map = {
+                "sql_query": "sql.query",
+                "kb_search": "kb.search",
+                "kpi_top_root_causes": "kpi.top_root_causes",
             }
-            
-            if tool_name not in endpoint_map:
+
+            if tool_name not in mcp_tool_map:
                 raise ValueError(f"Unknown tool: {tool_name}")
-            
-            endpoint = endpoint_map[tool_name]
-            url = f"{self.mcp_server_url}{endpoint}"
-            
-            # Special handling for kpi_top_root_causes
+
+            mcp_tool_id = mcp_tool_map[tool_name]
+            url = f"{self.mcp_server_url}/tools/call"
+
+            # Special handling for kpi_top_root_causes: convert arguments into KPI aggregate format
             if tool_name == "kpi_top_root_causes":
-                # Convert to KPI aggregate format
-                kpi_arguments = {
-                    "kpi_name": "top_root_causes",
-                    "start_date": arguments["start_date"],
-                    "end_date": arguments["end_date"],
-                    "group_by": ["category", "root_cause"],
-                    "filters": {}
-                }
-                
-                if "category" in arguments:
-                    kpi_arguments["filters"]["category"] = arguments["category"]
-                
-                if "top_n" in arguments:
-                    kpi_arguments["top_n"] = arguments["top_n"]
-                
-                arguments = kpi_arguments
-            
-            # Make request to MCP server
-            response = await self.client.post(url, json=arguments)
+                # MCP kpi tool expects parameters: year (required), optional month, top_n, category_filter
+                # Accept either 'start_date'/'end_date' or direct 'year'/'month' from arguments.
+                year = None
+                month = None
+
+                # Prefer explicit year/month if provided
+                if arguments.get("year"):
+                    year = int(arguments.get("year"))
+                if arguments.get("month"):
+                    month = int(arguments.get("month"))
+
+                # If start_date provided, derive year (and month if start/end in same month)
+                if not year and arguments.get("start_date"):
+                    try:
+                        sd = datetime.strptime(arguments.get("start_date"), "%Y-%m-%d")
+                        year = sd.year
+                    except Exception:
+                        pass
+
+                if arguments.get("start_date") and arguments.get("end_date"):
+                    try:
+                        sd = datetime.strptime(arguments.get("start_date"), "%Y-%m-%d")
+                        ed = datetime.strptime(arguments.get("end_date"), "%Y-%m-%d")
+                        # If both dates are within the same month, set month; otherwise leave None
+                        if sd.year == ed.year and sd.month == ed.month:
+                            month = sd.month
+                    except Exception:
+                        pass
+
+                # top_n and category mapping
+                mcp_params = {}
+                if year:
+                    mcp_params["year"] = int(year)
+                else:
+                    raise ValueError("kpi_top_root_causes requires a 'year' or 'start_date' that includes a year")
+
+                if month:
+                    mcp_params["month"] = int(month)
+
+                if arguments.get("top_n"):
+                    mcp_params["top_n"] = int(arguments.get("top_n"))
+
+                # Map category -> category_filter expected by MCP tool
+                if arguments.get("category"):
+                    mcp_params["category_filter"] = arguments.get("category")
+
+                mcp_body = {"tool": mcp_tool_id, "parameters": mcp_params}
+            else:
+                # For other tools, wrap arguments under 'parameters'
+                mcp_body = {"tool": mcp_tool_id, "parameters": arguments}
+
+            # Make request to MCP server (ToolCallRequest shape)
+            response = await self.client.post(url, json=mcp_body)
             response.raise_for_status()
             
             result = response.json()

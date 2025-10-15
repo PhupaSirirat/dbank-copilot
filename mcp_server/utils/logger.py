@@ -91,12 +91,12 @@ def log_tool_call(
         print(f"Warning: Failed to log to database: {e}")
     
     # Log to file as backup
-    try:
-        log_file = os.path.join(LOG_DIR, f"tool_calls_{timestamp.strftime('%Y%m%d')}.log")
-        with open(log_file, 'a') as f:
-            f.write(json.dumps(log_entry) + '\n')
-    except Exception as e:
-        print(f"Warning: Failed to log to file: {e}")
+    # try:
+    #     log_file = os.path.join(LOG_DIR, f"tool_calls_{timestamp.strftime('%Y%m%d')}.log")
+    #     with open(log_file, 'a') as f:
+    #         f.write(json.dumps(log_entry) + '\n')
+    # except Exception as e:
+    #     print(f"Warning: Failed to log to file: {e}")
 
 def get_recent_logs(
     limit: int = 50,

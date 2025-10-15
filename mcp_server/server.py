@@ -219,15 +219,15 @@ async def call_tool(request: ToolCallRequest) -> ToolCallResponse:
         execution_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
         
         # Log the tool call
-        log_tool_call(
-            tool_name=request.tool,
-            parameters=request.parameters,
-            user_id=request.user_id,
-            session_id=request.session_id,
-            execution_time_ms=execution_time_ms,
-            status="success",
-            result_summary=f"Returned {len(result) if isinstance(result, list) else 1} results"
-        )
+        # log_tool_call(
+        #     tool_name=request.tool,
+        #     parameters=request.parameters,
+        #     user_id=request.user_id,
+        #     session_id=request.session_id,
+        #     execution_time_ms=execution_time_ms,
+        #     status="success",
+        #     result_summary=f"Returned {len(result) if isinstance(result, list) else 1} results"
+        # )
         
         return ToolCallResponse(
             success=True,

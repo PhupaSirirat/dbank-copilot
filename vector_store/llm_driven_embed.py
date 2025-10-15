@@ -1,6 +1,6 @@
 """
-Embed Knowledge Base Documents into pgvector
-Supports both OpenAI and local sentence-transformers
+Embed Knowledge Base Documents into pgvector with LLM-Driven Chunking
+Uses OpenAI GPT for intelligent semantic chunking
 """
 
 import os
@@ -19,9 +19,10 @@ load_dotenv()
 
 # Configuration
 KNOWLEDGE_BASE_DIR = "knowledge_base/kb_files"
-CHUNK_SIZE = 800  # tokens per chunk
-CHUNK_OVERLAP = 20  # token overlap between chunks
-EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")  # or "local"
+TARGET_CHUNK_SIZE = 800  # target tokens per chunk
+MAX_CHUNK_SIZE = 1200  # maximum tokens per chunk
+EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")
+CHUNKING_METHOD = os.getenv("CHUNKING_METHOD", "llm")  # "llm" or "simple"
 
 # Database connection
 DB_CONFIG = {
@@ -32,10 +33,12 @@ DB_CONFIG = {
     'password': os.getenv('POSTGRES_PASSWORD', 'dbank_pass_2025')
 }
 
+# Initialize OpenAI client
+from openai import OpenAI
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 # Initialize embedding model
 if EMBEDDING_PROVIDER == "openai":
-    from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     EMBEDDING_MODEL = "text-embedding-3-small"
     EMBEDDING_DIM = 1536
 else:
@@ -44,6 +47,148 @@ else:
     EMBEDDING_DIM = 384
 
 print(f"🚀 Using {EMBEDDING_PROVIDER} embeddings (dimension: {EMBEDDING_DIM})")
+print(f"🧠 Using {CHUNKING_METHOD} chunking method")
+
+# =====================================================
+# LLM-Driven Chunking Functions
+# =====================================================
+
+def count_tokens(text: str) -> int:
+    """Count tokens in text"""
+    encoding = tiktoken.get_encoding("cl100k_base")
+    return len(encoding.encode(text))
+
+def chunk_text_llm(text: str, target_size: int = TARGET_CHUNK_SIZE) -> List[Dict]:
+    """
+    Use LLM to intelligently chunk text based on semantic boundaries
+    Returns list of dicts with 'content', 'title', and 'token_count'
+    """
+    total_tokens = count_tokens(text)
+    
+    # If document is small enough, return as single chunk
+    if total_tokens <= MAX_CHUNK_SIZE:
+        return [{
+            'content': text.strip(),
+            'title': 'Full Document',
+            'token_count': total_tokens
+        }]
+    
+    # Estimate number of chunks needed
+    estimated_chunks = max(2, (total_tokens // target_size) + 1)
+    
+    # Prepare prompt for LLM
+    system_prompt = """You are an expert document chunking assistant. Your task is to split documents into semantically coherent chunks for a RAG system.
+
+Rules:
+1. Each chunk should be self-contained and meaningful
+2. Keep related information together (e.g., a question with its answer)
+3. Respect document structure (sections, subsections)
+4. Target {target_size} tokens per chunk, but prioritize semantic coherence
+5. Include relevant context/headers in each chunk when needed
+6. Never split mid-sentence or mid-paragraph
+7. For lists or steps, keep them together when possible
+
+Output JSON format:
+{{
+  "chunks": [
+    {{
+      "title": "Brief descriptive title for this chunk",
+      "content": "The actual chunk content with any necessary context"
+    }}
+  ]
+}}""".format(target_size=target_size)
+
+    user_prompt = f"""Split the following document into approximately {estimated_chunks} semantically coherent chunks.
+
+Target: ~{target_size} tokens per chunk (but prioritize semantic boundaries over exact token counts)
+
+Document:
+---
+{text}
+---
+
+Return ONLY valid JSON with no additional text."""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Fast and cost-effective for chunking
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0,
+            response_format={"type": "json_object"}
+        )
+        
+        result = json.loads(response.choices[0].message.content)
+        chunks = result.get('chunks', [])
+        
+        # Add token counts and validate
+        validated_chunks = []
+        for chunk in chunks:
+            content = chunk.get('content', '').strip()
+            if len(content) < 50:  # Skip very short chunks
+                continue
+                
+            token_count = count_tokens(content)
+            validated_chunks.append({
+                'content': content,
+                'title': chunk.get('title', 'Untitled Section'),
+                'token_count': token_count
+            })
+        
+        # If chunking resulted in too few or no chunks, fall back to simple chunking
+        if len(validated_chunks) == 0:
+            print("   ⚠️  LLM chunking failed, falling back to simple chunking")
+            return chunk_text_simple(text, target_size)
+        
+        return validated_chunks
+        
+    except Exception as e:
+        print(f"   ⚠️  LLM chunking error: {e}, falling back to simple chunking")
+        return chunk_text_simple(text, target_size)
+
+def chunk_text_simple(text: str, chunk_size: int = TARGET_CHUNK_SIZE, overlap: int = 100) -> List[Dict]:
+    """
+    Simple token-based chunking as fallback
+    Returns same format as LLM chunking for consistency
+    """
+    encoding = tiktoken.get_encoding("cl100k_base")
+    tokens = encoding.encode(text)
+    n_tokens = len(tokens)
+    
+    chunks = []
+    start = 0
+    chunk_num = 0
+    
+    while start < n_tokens:
+        end = min(start + chunk_size, n_tokens)
+        chunk_tokens = tokens[start:end]
+        chunk_str = encoding.decode(chunk_tokens).strip()
+        
+        if chunk_str:
+            chunks.append({
+                'content': chunk_str,
+                'title': f'Chunk {chunk_num + 1}',
+                'token_count': len(chunk_tokens)
+            })
+            chunk_num += 1
+        
+        # Move forward with overlap
+        step = end - start
+        next_start = end - min(overlap, step // 2)
+        start = max(next_start, start + 1)
+    
+    return chunks
+
+def chunk_text(text: str) -> List[Dict]:
+    """
+    Main chunking function - chooses method based on configuration
+    """
+    if CHUNKING_METHOD == "llm":
+        return chunk_text_llm(text, TARGET_CHUNK_SIZE)
+    else:
+        return chunk_text_simple(text, TARGET_CHUNK_SIZE)
 
 # =====================================================
 # Document Processing Functions
@@ -53,90 +198,6 @@ def read_markdown_file(filepath: str) -> str:
     """Read markdown file content"""
     with open(filepath, 'r', encoding='utf-8') as f:
         return f.read()
-
-def chunk_text(
-    text: str,
-    chunk_size: int = CHUNK_SIZE,
-    overlap: int = CHUNK_OVERLAP,
-) -> List[str]:
-    """
-    Fast token-based chunking (V1-style) with safety guards:
-    - No heavy precompute
-    - Prevent infinite loops (always forward progress)
-    - Clamp overlap if it's too large for the current chunk
-    - Choose cut points using character-length heuristics (unit-consistent)
-    """
-    encoding = tiktoken.get_encoding("cl100k_base")
-    tokens = encoding.encode(text)
-    n_tokens = len(tokens)
-
-    chunks: List[str] = []
-    start = 0
-
-    # simple helpers for sentence-like break without regex
-    def best_sentence_break(s: str) -> int:
-        # check a few common patterns; pick the rightmost
-        cand = [
-            s.rfind(". "),
-            s.rfind(".\n"),
-            s.rfind("! "),
-            s.rfind("!\n"),
-            s.rfind("? "),
-            s.rfind("?\n"),
-        ]
-        return max(cand)
-
-    while start < n_tokens:
-        end = min(start + chunk_size, n_tokens)
-        chunk_tokens = tokens[start:end]
-        chunk_str = encoding.decode(chunk_tokens)
-
-        # try to cut nicely only if not the last chunk
-        if end < n_tokens and chunk_str:
-            half_char = len(chunk_str) * 0.5  # compare with chars (unit-consistent)
-            cut_idx = -1
-
-            # 1) paragraph break
-            last_para = chunk_str.rfind("\n\n")
-            if last_para != -1 and last_para >= half_char:
-                cut_idx = last_para
-            else:
-                # 2) sentence break
-                last_sent = best_sentence_break(chunk_str)
-                if last_sent != -1 and last_sent >= half_char:
-                    # include the punctuation if it exists
-                    cut_idx = last_sent + 1
-
-            if cut_idx != -1:
-                # re-encode to align token boundary
-                sub = chunk_str[:cut_idx]
-                sub_tokens = encoding.encode(sub)
-                end = start + len(sub_tokens)
-                chunk_tokens = tokens[start:end]
-                chunk_str = sub
-
-        piece = chunk_str.strip()
-        if piece:
-            chunks.append(piece)
-
-        # --- SAFETY: ensure forward progress & clamp overlap dynamically ---
-        step = end - start  # tokens moved this round
-        if step <= 0:
-            # pathological case: force move 1 token
-            start += 1
-            continue
-
-        eff_overlap = overlap
-        # if overlap >= current step, clamp to 1/4 of current step (keeps speed & context)
-        if eff_overlap >= step:
-            eff_overlap = max(step // 4, 0)
-
-        next_start = end - eff_overlap
-        if next_start <= start:
-            next_start = start + 1  # always move forward at least 1 token
-        start = next_start
-
-    return chunks
 
 def extract_metadata(filepath: str, content: str) -> Dict:
     """Extract metadata from document"""
@@ -198,7 +259,6 @@ def get_embedding(text: str) -> List[float]:
 def ensure_vector_dimension(conn, dim: int):
     """Update vector dimension if needed"""
     with conn.cursor() as cur:
-        # Check current dimension
         cur.execute("""
             SELECT atttypmod 
             FROM pg_attribute 
@@ -231,7 +291,6 @@ def insert_embeddings(conn, embeddings_data: List[Tuple]):
             VALUES (%s, %s, %s, %s, %s, %s)
         """
         
-        # Convert metadata dicts to JSON strings
         formatted_data = [
             (name, doc_type, idx, content, embedding, json.dumps(metadata))
             for name, doc_type, idx, content, embedding, metadata in embeddings_data
@@ -266,11 +325,12 @@ def process_knowledge_base():
     
     all_embeddings = []
     total_chunks = 0
+    total_tokens = 0
     
     # Process each file
-    # for filepath in tqdm(md_files, desc="Processing documents"):
     for filepath in md_files:
-        print(f"\n🔍 Processing file: {filepath}")
+        print(f"\n🔍 Processing: {filepath}")
+        
         # Skip README
         if filepath.endswith('README.md'):
             continue
@@ -282,41 +342,46 @@ def process_knowledge_base():
             # Extract metadata
             metadata = extract_metadata(filepath, content)
             
-            # Chunk the document
+            # Chunk the document (now returns dict with metadata)
             chunks = chunk_text(content)
+            
         except Exception as e:
-            print(f"   ⚠️  Error processing file {filepath}: {e}")
+            print(f"   ⚠️  Error processing file: {e}")
             continue
         
-        print(f"\n📝 {metadata['title']}")
-        print(f"   Chunks: {len(chunks)}")
+        print(f"   📝 {metadata['title']}")
+        print(f"   📊 Created {len(chunks)} semantic chunks")
+        
+        # Show chunk details
+        for i, chunk_info in enumerate(chunks):
+            print(f"      └─ Chunk {i+1}: '{chunk_info['title']}' ({chunk_info['token_count']} tokens)")
         
         # Generate embeddings for each chunk
-        for idx, chunk in tqdm(enumerate(chunks), desc="  Embedding chunks", total=len(chunks), leave=True):
-            if len(chunk.strip()) < 50:  # Skip very short chunks
-                continue
-            
+        for idx, chunk_info in enumerate(tqdm(chunks, desc="  Embedding", leave=False)):
             try:
                 # Get embedding
-                embedding = get_embedding(chunk)
+                embedding = get_embedding(chunk_info['content'])
                 
-                # Prepare data
+                # Prepare enhanced metadata
                 chunk_metadata = {
                     **metadata,
                     'chunk_index': idx,
-                    'chunk_size': len(chunk)
+                    'chunk_title': chunk_info['title'],
+                    'chunk_tokens': chunk_info['token_count'],
+                    'chunking_method': CHUNKING_METHOD
                 }
                 
                 all_embeddings.append((
                     metadata['title'],
                     'markdown',
                     idx,
-                    chunk,
+                    chunk_info['content'],
                     embedding,
                     chunk_metadata
                 ))
                 
                 total_chunks += 1
+                total_tokens += chunk_info['token_count']
                 
             except Exception as e:
                 print(f"   ⚠️  Error embedding chunk {idx}: {e}")
@@ -326,15 +391,13 @@ def process_knowledge_base():
     print(f"\n💾 Inserting {total_chunks} chunks into database...")
     insert_embeddings(conn, all_embeddings)
     
-    print(f"✅ Inserted {total_chunks} document chunks")
+    avg_tokens = total_tokens / total_chunks if total_chunks > 0 else 0
+    print(f"✅ Inserted {total_chunks} chunks (avg {avg_tokens:.0f} tokens/chunk)")
     
     # Create index for faster search
     print("\n🔨 Creating vector index...")
     with conn.cursor() as cur:
-        # Drop existing index if any
         cur.execute("DROP INDEX IF EXISTS vector_store.documents_embedding_idx")
-        
-        # Create new index
         cur.execute("""
             CREATE INDEX documents_embedding_idx 
             ON vector_store.documents 
@@ -351,14 +414,15 @@ def process_knowledge_base():
             SELECT 
                 metadata->>'category' as category,
                 COUNT(*) as chunk_count,
-                COUNT(DISTINCT document_name) as doc_count
+                COUNT(DISTINCT document_name) as doc_count,
+                AVG((metadata->>'chunk_tokens')::int) as avg_tokens
             FROM vector_store.documents
             GROUP BY metadata->>'category'
         """)
         
         print("\n📊 Summary by Category:")
         for row in cur.fetchall():
-            print(f"   {row[0]:<20} {row[2]} docs, {row[1]} chunks")
+            print(f"   {row[0]:<20} {row[2]} docs, {row[1]} chunks (avg {row[3]:.0f} tokens)")
     
     conn.close()
     

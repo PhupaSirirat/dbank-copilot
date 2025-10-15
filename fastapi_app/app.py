@@ -5,6 +5,8 @@ Always streams responses using OpenAI GPT-4o-mini
 import os
 import json
 import time
+import asyncio
+import traceback
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -19,6 +21,45 @@ from core.tool_orchestrator import ToolOrchestrator
 from core.conversation import get_conversation_manager
 
 load_dotenv()
+
+
+# Helper functions
+def safe_json_dumps(data: dict) -> str:
+    """
+    Safely serialize dict to JSON, ensuring special characters are escaped
+    """
+    try:
+        return json.dumps(data, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({
+            "type": "error",
+            "content": f"Failed to serialize data: {str(e)}"
+        })
+
+
+def validate_messages(messages: list) -> list:
+    """
+    Validate and clean messages for LLM
+    """
+    cleaned = []
+    for msg in messages:
+        # Ensure message has required fields
+        if not isinstance(msg, dict):
+            continue
+        
+        if "role" not in msg or "content" not in msg:
+            continue
+        
+        # Ensure content is string
+        msg["content"] = str(msg["content"]) if msg["content"] is not None else ""
+        
+        # Ensure role is valid
+        if msg["role"] not in ["user", "assistant", "system", "function"]:
+            continue
+        
+        cleaned.append(msg)
+    
+    return cleaned
 
 
 # Lifespan context manager
@@ -127,6 +168,8 @@ async def process_question_stream(
     Yields JSON chunks in Server-Sent Events format
     """
     start_time = time.time()
+    accumulated_text = ""
+    executed_tools = []
     
     try:
         # Get components
@@ -151,15 +194,20 @@ async def process_question_stream(
         
         # Get conversation context
         context = conversation_manager.get_context(conversation_id)
+        messages = validate_messages(context)
         
-        # Add current question to context
-        messages = context + [{"role": "user", "content": question}]
+        # Ensure we have at least one message
+        if not messages:
+            messages = [{"role": "user", "content": question}]
+        
+        print(f"Messages to LLM: {json.dumps(messages, indent=2)}\n")
         
         # Get tool definitions
         tools = tool_orchestrator.get_tool_definitions()
         
         # Initial status
-        yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing your question...'})}\n\n"
+        yield f"data: {safe_json_dumps({'type': 'status', 'content': 'Analyzing your question...'})}\n\n"
+        await asyncio.sleep(0)  # Force flush
         
         # First pass: Get LLM response with potential tool calls
         response = await llm_client.generate(
@@ -169,56 +217,110 @@ async def process_question_stream(
             temperature=0.3  # Lower temperature for consistent support answers
         )
         
-        accumulated_text = ""
-        executed_tools = []
+        print(f"Response from LLM: {response}\n")
         
         # If tool calls requested, execute them
-        if response["tool_calls"]:
+        if response.get("tool_calls"):
             tool_count = len(response["tool_calls"])
-            yield f"data: {json.dumps({'type': 'status', 'content': f'Executing {tool_count} tool(s)...'})}\n\n"
+            yield f"data: {safe_json_dumps({'type': 'status', 'content': f'Executing {tool_count} tool(s)...'})}\n\n"
+            await asyncio.sleep(0)
+            
+            print(f"Executing {tool_count} tools...\n")
             
             # Execute tools
             executed_tools = await tool_orchestrator.execute_tools(
                 response["tool_calls"]
             )
             
+            print(f"Tools executed: {len(executed_tools)}\n")
+            
             # Emit tool call events
             for tool_call in executed_tools:
-                yield f"data: {json.dumps({'type': 'tool_call', 'data': tool_call.model_dump()})}\n\n"
+                tool_data = {
+                    "type": "tool_call",
+                    "data": {
+                        "tool_name": tool_call.tool_name,
+                        "parameters": tool_call.parameters if hasattr(tool_call, 'parameters') else {},
+                        "result": tool_call.result if hasattr(tool_call, 'result') else None,
+                        "execution_time": getattr(tool_call, 'execution_time', 0),
+                        "error": getattr(tool_call, 'error', None)
+                    }
+                }
+                yield f"data: {safe_json_dumps(tool_data)}\n\n"
+                await asyncio.sleep(0)
             
             # Add tool results to context
             for tool_call in executed_tools:
-                if not tool_call.error:
-                    # Format tool result for context
-                    result_summary = json.dumps(tool_call.result, indent=2)[:500]  # Truncate if too long
+                if hasattr(tool_call, 'result') and tool_call.result is not None:
+                    try:
+                        result_summary = json.dumps(tool_call.result, indent=2)
+                    except:
+                        result_summary = str(tool_call.result)
+                    
                     messages.append({
                         "role": "function",
-                        "name": tool_call.tool_name,
-                        "content": f"Tool '{tool_call.tool_name}' returned:\n{result_summary}"
+                        "name": str(tool_call.tool_name),
+                        "content": result_summary
+                    })
+                else:
+                    messages.append({
+                        "role": "function",
+                        "name": str(tool_call.tool_name),
+                        "content": "Tool executed successfully but returned no data."
                     })
             
             # Get final response with tool results
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Generating insights...'})}\n\n"
+            yield f"data: {safe_json_dumps({'type': 'status', 'content': 'Generating insights...'})}\n\n"
+            await asyncio.sleep(0)
+            
+            print("Streaming final response with tool results...\n")
             
             # Stream final response
-            async for chunk in llm_client.stream(
-                messages=messages,
-                tools=None,  # No more tool calls
-                max_tokens=max_tokens,
-                temperature=0.3
-            ):
-                if chunk["type"] == "text":
-                    accumulated_text += chunk["content"]
-                    yield f"data: {json.dumps({'type': 'text', 'content': chunk['content']})}\n\n"
-                elif chunk["type"] == "done":
-                    break
+            try:
+                async for chunk in llm_client.stream(
+                    messages=messages,
+                    tools=None,  # No more tool calls
+                    max_tokens=max_tokens,
+                    temperature=0.3
+                ):
+                    if chunk["type"] == "text":
+                        # Validate chunk content
+                        if chunk.get("content") is None:
+                            print("WARNING: Received null content chunk")
+                            continue
+                        
+                        # Ensure content is string
+                        content = str(chunk["content"])
+                        accumulated_text += content
+                        
+                        # Send text chunk
+                        yield f"data: {safe_json_dumps({'type': 'text', 'content': content})}\n\n"
+                        await asyncio.sleep(0)
+                        
+                    elif chunk["type"] == "done":
+                        print("LLM stream finished successfully")
+                        break
+                        
+            except Exception as e:
+                error_msg = f"Streaming error: {str(e)}"
+                print(f"ERROR during streaming: {error_msg}")
+                traceback.print_exc()
+                
+                # Send error to client
+                yield f"data: {safe_json_dumps({'type': 'error', 'content': error_msg})}\n\n"
+                await asyncio.sleep(0)
             
-            # Extract citations
-            citations = tool_orchestrator.extract_citations(executed_tools)
-            
-            # Emit citations
-            for citation in citations:
-                yield f"data: {json.dumps({'type': 'citation', 'data': citation.model_dump()})}\n\n"
+            # Extract citations if available
+            try:
+                citations = tool_orchestrator.extract_citations(executed_tools)
+                
+                # Emit citations
+                for citation in citations:
+                    yield f"data: {safe_json_dumps({'type': 'citation', 'data': citation.model_dump()})}\n\n"
+                    await asyncio.sleep(0)
+            except Exception as e:
+                print(f"Warning: Could not extract citations: {e}")
+                citations = []
             
             # Save assistant message with citations
             conversation_manager.add_message(
@@ -231,17 +333,41 @@ async def process_question_stream(
             
         else:
             # No tool calls - stream direct response
-            async for chunk in llm_client.stream(
-                messages=messages,
-                tools=None,
-                max_tokens=max_tokens,
-                temperature=0.3
-            ):
-                if chunk["type"] == "text":
-                    accumulated_text += chunk["content"]
-                    yield f"data: {json.dumps({'type': 'text', 'content': chunk['content']})}\n\n"
-                elif chunk["type"] == "done":
-                    break
+            print("No tool calls, streaming direct response...\n")
+            
+            try:
+                async for chunk in llm_client.stream(
+                    messages=messages,
+                    tools=None,
+                    max_tokens=max_tokens,
+                    temperature=0.3
+                ):
+                    if chunk["type"] == "text":
+                        # Validate chunk content
+                        if chunk.get("content") is None:
+                            print("WARNING: Received null content chunk")
+                            continue
+                        
+                        # Ensure content is string
+                        content = str(chunk["content"])
+                        accumulated_text += content
+                        
+                        # Send text chunk
+                        yield f"data: {safe_json_dumps({'type': 'text', 'content': content})}\n\n"
+                        await asyncio.sleep(0)
+                        
+                    elif chunk["type"] == "done":
+                        print("LLM stream finished successfully")
+                        break
+                        
+            except Exception as e:
+                error_msg = f"Streaming error: {str(e)}"
+                print(f"ERROR during streaming: {error_msg}")
+                traceback.print_exc()
+                
+                # Send error to client
+                yield f"data: {safe_json_dumps({'type': 'error', 'content': error_msg})}\n\n"
+                await asyncio.sleep(0)
             
             # Save assistant message
             conversation_manager.add_message(
@@ -252,11 +378,23 @@ async def process_question_stream(
         
         # Send completion event
         response_time = time.time() - start_time
-        yield f"data: {json.dumps({'type': 'done', 'data': {'response_time': response_time, 'conversation_id': conversation_id, 'tool_calls_count': len(executed_tools)}})}\n\n"
+        print(f"Stream completed in {response_time:.2f}s\n")
+        
+        yield f"data: {safe_json_dumps({'type': 'done', 'data': {'response_time': response_time, 'conversation_id': conversation_id, 'tool_calls_count': len(executed_tools)}})}\n\n"
+        await asyncio.sleep(0)
+        
+    except asyncio.CancelledError:
+        print(f"Client disconnected from conversation {conversation_id}")
+        yield f"data: {safe_json_dumps({'type': 'cancelled', 'content': 'Request cancelled'})}\n\n"
         
     except Exception as e:
-        error_msg = str(e)
-        yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
+        error_msg = f"Unexpected error: {str(e)}"
+        print(f"ERROR in process_question_stream: {error_msg}")
+        traceback.print_exc()
+        
+        # Send error to client
+        yield f"data: {safe_json_dumps({'type': 'error', 'content': error_msg})}\n\n"
+        await asyncio.sleep(0)
 
 
 @app.post("/ask")
@@ -284,7 +422,12 @@ async def ask_question(request: Request, ask_request: AskRequest):
             user_id=ask_request.user_id or "anonymous",
             max_tokens=ask_request.max_tokens
         ),
-        media_type="text/event-stream"
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
     )
 
 

@@ -78,7 +78,7 @@ class DBankCopilotTester:
                 print(f"   Tool Calls: {tool_calls}")
                 
                 # Check if kpi_top_root_causes was called
-                has_kpi_tool = "kpi_top_root_causes" in tool_calls
+                has_kpi_tool = "kpi.top_root_causes" in tool_calls
                 print(f"   Used KPI Tool: {'✅' if has_kpi_tool else '❌'}")
                 
                 return has_kpi_tool and len(full_answer) > 0
@@ -124,7 +124,7 @@ class DBankCopilotTester:
                 print(f"   Tool Calls: {tool_calls}")
                 
                 # Check if SQL was used
-                has_sql = "sql_query" in tool_calls
+                has_sql = "sql.query" in tool_calls
                 print(f"   Used SQL Query: {'✅' if has_sql else '❌'}")
                 
                 return has_sql and len(full_answer) > 0
@@ -168,7 +168,7 @@ class DBankCopilotTester:
                 print(f"   Answer Preview: {full_answer[:200]}...")
                 
                 # Check if SQL or answer contains SQL query
-                has_sql = "SELECT" in full_answer.upper() or "sql_query" in tool_calls
+                has_sql = "SELECT" in full_answer.upper() or "sql.query" in tool_calls
                 print(f"   Contains SQL: {'✅' if has_sql else '❌'}")
                 
                 return has_sql and len(full_answer) > 0

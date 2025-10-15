@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Insights Copilot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="h-screen flex overflow-hidden">
+    <!-- Left Sidebar - Conversation History -->
+    <div id="leftSidebar" class="sidebar-left w-64 flex-shrink-0 border-r flex flex-col" style="border-color: var(--border-color)">
+        <!-- Sidebar Header -->
+        <div class="p-3 border-b" style="border-color: var(--border-color)">
+            <button id="newChatBtn" class="new-chat-btn w-full px-4 py-2.5 rounded-lg text-sm flex items-center justify-center gap-2" style="color: var(--text-primary)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                New chat
+            </button>
+        </div>
+
+        <!-- Conversations List -->
+        <div class="flex-1 overflow-y-auto p-2">
+            <div class="text-xs px-3 py-2 font-medium" style="color: var(--text-secondary)">Recent</div>
+            <div id="conversationsList" class="space-y-1">
+                <button class="conversation-item w-full text-left px-3 py-2.5 rounded-lg text-sm truncate" style="background: var(--bg-hover); color: var(--text-primary)">
+                    Current Conversation
+                </button>
+                <button class="conversation-item w-full text-left px-3 py-2.5 rounded-lg text-sm truncate" style="color: var(--text-secondary)">
+                    Building a React app
+                </button>
+                <button class="conversation-item w-full text-left px-3 py-2.5 rounded-lg text-sm truncate" style="color: var(--text-secondary)">
+                    Python data analysis
+                </button>
+                <button class="conversation-item w-full text-left px-3 py-2.5 rounded-lg text-sm truncate" style="color: var(--text-secondary)">
+                    CSS Grid tutorial
+                </button>
+                <button class="conversation-item w-full text-left px-3 py-2.5 rounded-lg text-sm truncate" style="color: var(--text-secondary)">
+                    API integration help
+                </button>
+            </div>
+        </div>
+
+        <!-- User Profile -->
+        <div class="p-3 border-t" style="border-color: var(--border-color)">
+            <div class="flex items-center gap-3 px-2 py-2.5 rounded-lg icon-btn cursor-pointer">
+                <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold" style="background: var(--accent); color: white">
+                    U
+                </div>
+                <span class="text-sm" style="color: var(--text-primary)">User</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col min-w-0">
+        <!-- Header -->
+        <header class="px-4 py-3 flex items-center justify-between border-b" style="background: var(--bg-secondary); border-color: var(--border-color)">
+            <button id="toggleLeftSidebar" class="icon-btn p-2 rounded-lg lg:hidden" style="color: var(--text-secondary)">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            </button>
+            
+            <h1 class="text-lg font-semibold tracking-tight" style="color: var(--text-primary)">Deep Insights Copilot</h1>
+            
+            <!-- Connection Status Indicators -->
+            <div class="flex items-center gap-3">
+                <div id="fastapiStatus" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border" style="background: var(--bg-tertiary); border-color: var(--border-color)">
+                    <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                    <span class="text-xs font-medium" style="color: var(--text-secondary)">FastAPI</span>
+                </div>
+                
+                <div id="mcpStatus" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border" style="background: var(--bg-tertiary); border-color: var(--border-color)">
+                    <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                    <span class="text-xs font-medium" style="color: var(--text-secondary)">MCP</span>
+                </div>
+                
+                <button id="toggleRightSidebar" class="icon-btn p-2 rounded-lg lg:hidden" style="color: var(--text-secondary)">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Messages Container -->
+        <div id="messages" class="flex-1 overflow-y-auto">
+            <div class="max-w-3xl mx-auto">
+                <!-- Welcome Message -->
+                <div class="text-center py-24">
+                    <h2 class="text-4xl font-bold mb-3" style="color: var(--text-primary)">Deep Insights Copilot</h2>
+                    <p class="text-lg" style="color: var(--text-secondary)">How can I help you today?</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="border-t h-24 overflow-y-auto" style="background: var(--bg-secondary); border-color: var(--border-color)">
+            <div class="max-w-3xl mx-auto px-4 py-4">
+                <form id="chatForm" class="relative">
+                    <textarea 
+                        id="messageInput"
+                        rows="1"
+                        placeholder="Ask about tickets, customers, products..."
+                        class="input-area w-full px-4 py-3 pr-12 rounded-xl resize-none focus:outline-none"
+                        style="max-height: 200px; background: var(--bg-tertiary); color: var(--text-primary)"
+                    ></textarea>
+                    <button 
+                        type="submit"
+                        class="send-button absolute right-2 bottom-3 rounded-lg p-2"
+                        id="sendButton"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="white" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/>
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Sidebar - Tool Invocations -->
+    <div id="rightSidebar" class="sidebar-right w-80 flex-shrink-0 border-l flex flex-col" style="border-color: var(--border-color)">
+        <!-- Sidebar Header -->
+        <div class="p-4 border-b" style="border-color: var(--border-color)">
+            <h2 class="font-semibold" style="color: var(--text-primary)">Tool Invocations</h2>
+            <p class="text-xs mt-1" style="color: var(--text-secondary)">Function calls during this conversation</p>
+        </div>
+
+        <!-- Tool Invocations List -->
+        <div class="flex-1 overflow-y-auto p-3">
+            <div id="toolInvocationsList" class="space-y-3">
+                <div class="text-sm text-center py-12" style="color: var(--text-secondary)">
+                    No tool invocations yet
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="p-4 border-t" style="border-color: var(--border-color)">
+            <div class="space-y-2">
+                <div class="stat-badge flex justify-between items-center px-3 py-2 rounded-lg">
+                    <span class="text-xs" style="color: var(--text-secondary)">Total Invocations</span>
+                    <span id="totalInvocations" class="text-sm font-semibold" style="color: var(--text-primary)">0</span>
+                </div>
+                <div class="stat-badge flex justify-between items-center px-3 py-2 rounded-lg">
+                    <span class="text-xs" style="color: var(--text-secondary)">This Session</span>
+                    <span id="sessionInvocations" class="text-sm font-semibold" style="color: var(--text-primary)">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
