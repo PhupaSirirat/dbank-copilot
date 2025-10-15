@@ -5,7 +5,7 @@ import uuid
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
-from models.schemas import Conversation, Message, ToolCall, Citation
+from ..models.schemas import Conversation, Message, ToolCall, Citation
 
 
 class ConversationManager:

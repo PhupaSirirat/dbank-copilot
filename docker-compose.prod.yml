@@ -1,0 +1,100 @@
+# docker-compose.prod.yml
+# Production environment overrides
+
+version: '3.8'
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}  # Use secure password from .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Add backup volume
+      - ./backups:/backups
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  mcp-server:
+    build:
+      target: runtime
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+    # Don't mount code volumes in production
+    volumes: []
+    command: gunicorn mcp_server.server:app --bind 0.0.0.0:8000 --workers 4 --timeout 300
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    restart: always
+
+  api:
+    build:
+      target: runtime
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+    # Don't mount code volumes in production
+    volumes: []
+    command: gunicorn fastapi_app.app:app --bind 0.0.0.0:8001 --workers 4 --worker-class uvicorn.workers.UvicornWorker --timeout 300
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    restart: always
+
+  frontend:
+    # Use production-optimized nginx config
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    restart: always
+
+  # Backup service (runs daily)
+  backup:
+    image: postgres:16
+    container_name: dbank-backup
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+    networks:
+      - dbank-network
+    depends_on:
+      - postgres
+    command: >
+      sh -c "
+        while true; do
+          echo 'Running daily backup...' &&
+          PGPASSWORD=$$POSTGRES_PASSWORD pg_dump -h $$POSTGRES_HOST -U $$POSTGRES_USER -d $$POSTGRES_DB > /backups/backup_$$(date +%Y%m%d_%H%M%S).sql &&
+          echo 'Backup completed' &&
+          find /backups -name '*.sql' -mtime +7 -delete &&
+          sleep 86400
+        done
+      "
+    restart: always

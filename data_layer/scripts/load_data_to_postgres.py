@@ -9,16 +9,15 @@ from dotenv import load_dotenv
 import os
 from datetime import datetime
 
-# Load environment variables
-load_dotenv()
+# Load .env but don't override existing environment variables
+load_dotenv(override=False)  # ✅ Docker env vars take precedence
 
-# Database connection
 DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5433'),
-    'database': os.getenv('DB_NAME', 'dbank'),
-    'user': os.getenv('DB_USER', 'dbank_user'),
-    'password': os.getenv('DB_PASSWORD', 'dbank_pass_2025')
+    'host': os.getenv('POSTGRES_HOST', 'localhost'),
+    'port': int(os.getenv('POSTGRES_PORT', '5433')),
+    'database': os.getenv('POSTGRES_DB', 'dbank'),
+    'user': os.getenv('POSTGRES_USER', 'dbank_user'),
+    'password': os.getenv('POSTGRES_PASSWORD', 'dbank_pass_2025')
 }
 
 DATA_DIR = 'data_layer/sample_data'

@@ -6,7 +6,7 @@ import time
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from models.schemas import ToolCall, Citation
+from ..models.schemas import ToolCall, Citation
 
 class ToolOrchestrator:
     """Orchestrates calls to MCP server tools for dBank"""

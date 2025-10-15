@@ -1,9 +1,9 @@
 # dbt_project.yml
-name: 'dbank_analytics'
+name: 'dbank_copilot'
 version: '1.0.0'
 config-version: 2
 
-profile: 'dbank'
+profile: 'dbank_copilot'
 
 model-paths: ["models"]
 analysis-paths: ["analyses"]
@@ -18,7 +18,7 @@ clean-targets:
   - "dbt_packages"
 
 models:
-  dbank_analytics:
+  dbank_copilot:
     # Staging models - materialized as views
     staging:
       +materialized: view
@@ -32,6 +32,12 @@ models:
 
 # Test configurations
 tests:
-  dbank_analytics:
+  dbank_copilot:
     +store_failures: true
     +schema: test_results
+
+# Variables (can be overridden)
+vars:
+  # Date ranges for incremental models
+  start_date: '2022-01-01'
+  end_date: '2025-12-31'

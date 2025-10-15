@@ -16,6 +16,159 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - dbank-network
+
+  # Data Initialization Service (runs once)
+  data-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+    container_name: dbank-data-init
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: dbank
+      POSTGRES_USER: dbank_user
+      POSTGRES_PASSWORD: dbank_pass_2025
+      PYTHONPATH: /app
+      PGPASSWORD: dbank_pass_2025
+      DBT_PROFILES_DIR: /app/dbt_project
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data_layer:/app/data_layer
+      - ./dbt_project:/app/dbt_project
+      - ./vector_store:/app/vector_store
+      - ./knowledge_base:/app/knowledge_base
+    command: >
+      bash -c "
+        set -e
+        echo '🚀 Starting data initialization...' &&
+        
+        echo '🗄️  Step 0: Creating database schemas...' &&
+        psql -h postgres -U dbank_user -d dbank -f data_layer/sql/01_create_schema.sql &&
+        echo '✅ Database schemas created' &&
+        
+        echo '📊 Step 1: Generating sample data...' &&
+        python data_layer/scripts/generate_sample_data.py &&
+        echo '✅ Sample data generated' &&
+        
+        echo '📥 Step 2: Loading data to PostgreSQL...' &&
+        python data_layer/scripts/load_data_to_postgres.py &&
+        echo '✅ Data loaded to PostgreSQL' &&
+        
+        echo '🔧 Step 3: Running dbt transformations...' &&
+        cd dbt_project && 
+        dbt deps &&
+        dbt run &&
+        cd .. &&
+        echo '✅ dbt transformations complete' &&
+        
+        echo '🧠 Step 4: Generating vector embeddings...' &&
+        python vector_store/llm_driven_embed.py &&
+        echo '✅ Vector embeddings generated' &&
+        
+        echo '✅ Data initialization complete!'
+      "
+    networks:
+      - dbank-network
+    restart: "no"
+
+  # MCP Server
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: dbank-mcp-server
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    ports:
+      - "${MCP_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      data-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./mcp_server:/app/mcp_server
+      - ./vector_store:/app/vector_store
+      - ./tools:/app/tools
+      - ./utils:/app/utils
+    command: python mcp_server/server.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - dbank-network
+    restart: unless-stopped
+
+  # FastAPI Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: dbank-api
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      MCP_SERVER_URL: http://mcp-server:8000
+    ports:
+      - "${API_PORT:-8001}:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mcp-server:
+        condition: service_healthy
+    volumes:
+      - ./fastapi_app:/app/fastapi_app
+      - ./vector_store:/app/vector_store
+      - ./tools:/app/tools
+      - ./utils:/app/utils
+    command: uvicorn fastapi_app.app:app --host 0.0.0.0 --port 8001 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - dbank-network
+    restart: unless-stopped
+
+  # Frontend (Nginx serving static files)
+  frontend:
+    image: nginx:alpine
+    container_name: dbank-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    volumes:
+      - ./ui:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+    networks:
+      - dbank-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local
+
+networks:
+  dbank-network:
+    driver: bridge

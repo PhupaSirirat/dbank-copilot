@@ -1,0 +1,68 @@
+# docker-compose.dev.yml
+# Development environment overrides
+
+version: '3.8'
+
+services:
+  mcp-server:
+    build:
+      target: development
+    volumes:
+      - ./mcp_server:/app/mcp_server
+      - ./vector_store:/app/vector_store
+      - ./tools:/app/tools
+      - ./utils:/app/utils
+      - ./data_layer:/app/data_layer
+      - ./dbt_project:/app/dbt_project
+    environment:
+      - FLASK_ENV=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    command: >
+      sh -c "
+        pip install watchdog &&
+        watchmedo auto-restart -d /app/mcp_server -d /app/tools -p '*.py' --recursive -- python mcp_server/server.py
+      "
+
+  api:
+    build:
+      target: development
+    volumes:
+      - ./fastapi_app:/app/fastapi_app
+      - ./vector_store:/app/vector_store
+      - ./tools:/app/tools
+      - ./utils:/app/utils
+      - ./data_layer:/app/data_layer
+      - ./dbt_project:/app/dbt_project
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    command: uvicorn fastapi_app.app:app --host 0.0.0.0 --port 8001 --reload --reload-dir /app/fastapi_app
+
+  frontend:
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+    ports:
+      - "3000:80"
+      - "3001:80"  # Extra port for testing
+
+  # pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: dbank-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@dbank.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - dbank-network
+    depends_on:
+      - postgres
+
+volumes:
+  pgadmin_data:

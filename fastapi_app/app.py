@@ -15,10 +15,10 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from models.schemas import AskRequest, HealthCheck
-from core.llm_client import get_llm_client
-from core.tool_orchestrator import ToolOrchestrator
-from core.conversation import get_conversation_manager
+from .models.schemas import AskRequest, HealthCheck
+from .core.llm_client import get_llm_client
+from .core.tool_orchestrator import ToolOrchestrator
+from .core.conversation import get_conversation_manager
 
 load_dotenv()
 

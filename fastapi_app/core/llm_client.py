@@ -9,7 +9,7 @@ import openai
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
-from prompts.system_prompts import DBANK_SYSTEM_PROMPT
+from ..prompts.system_prompts import DBANK_SYSTEM_PROMPT
 
 load_dotenv()
 

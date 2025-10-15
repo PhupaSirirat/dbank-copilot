@@ -1,0 +1,126 @@
+# models/schema.yml
+version: 2
+
+models:
+  - name: stg_tickets
+    description: Staging model for tickets with cleaned and standardized fields
+    columns:
+      - name: ticket_id
+        description: Primary key
+        tests:
+          - unique
+          - not_null
+      - name: ticket_number
+        description: Business key
+        tests:
+          - unique
+          - not_null
+      - name: ticket_status
+        description: Current status of ticket
+        tests:
+          - accepted_values:
+              values: ['open', 'in progress', 'resolved', 'closed']
+      - name: is_resolved
+        description: Boolean flag for resolved tickets
+        tests:
+          - not_null
+          
+  - name: mart_ticket_analytics
+    description: >
+      Comprehensive ticket analytics mart with all dimensions joined.
+      Powers most ticket analysis queries and dashboards.
+    columns:
+      - name: ticket_id
+        description: Primary key
+        tests:
+          - unique
+          - not_null
+      - name: customer_uuid
+        description: Customer identifier (safe to expose)
+        tests:
+          - not_null
+      - name: root_cause_name
+        description: Human-readable root cause
+        tests:
+          - not_null
+      - name: created_date
+        description: Ticket creation date
+        tests:
+          - not_null
+      - name: is_v12_related
+        description: Flag for tickets related to v1.2 app release
+        tests:
+          - not_null
+    tests:
+      # Custom test: Check for data freshness
+      - dbt_utils.recency:
+          datepart: day
+          field: ticket_created_date
+          interval: 1
+          
+  - name: mart_top_root_causes
+    description: >
+      Aggregated root causes by time period.
+      Pre-calculated KPIs for the top_root_causes tool.
+      Answers: "Top 5 root causes in the previous month by category"
+    columns:
+      - name: root_cause_name
+        description: Root cause name
+        tests:
+          - not_null
+      - name: total_tickets
+        description: Total tickets for this root cause
+        tests:
+          - not_null
+      - name: pct_of_period
+        description: Percentage of tickets in the time period
+      - name: pct_open
+        description: Percentage of tickets still open
+      - name: avg_resolution_hours
+        description: Average time to resolve
+    tests:
+      # Custom test: Percentages should sum to ~100
+      - dbt_utils.expression_is_true:
+          expression: "pct_of_period >= 0 and pct_of_period <= 100"
+          
+  - name: mart_churned_customers
+    description: >
+      Customer churn analysis with risk scores.
+      Identifies customers who haven't logged in for 30/90 days.
+      Powers churn prediction and retention campaigns.
+    columns:
+      - name: customer_uuid
+        description: Customer identifier
+        tests:
+          - unique
+          - not_null
+      - name: is_churned_30d
+        description: True if no login in 30+ days
+        tests:
+          - not_null
+      - name: is_churned_90d
+        description: True if no login in 90+ days
+        tests:
+          - not_null
+      - name: churn_risk_score
+        description: Risk score 0-100 (higher = more risk)
+        tests:
+          - not_null
+      - name: churn_risk_level
+        description: Risk level category
+        tests:
+          - accepted_values:
+              values: ['active', 'low', 'medium', 'high', 'critical']
+      - name: days_since_login
+        description: Days since last successful login
+        tests:
+          - not_null
+    tests:
+      # Custom test: Risk score should match risk level
+      - dbt_utils.expression_is_true:
+          expression: >
+            (churn_risk_level = 'active' and churn_risk_score <= 20)
+            or (churn_risk_level = 'low' and churn_risk_score between 21 and 40)
+            or (churn_risk_level = 'medium' and churn_risk_score between 41 and 60)
+            or (churn_risk_level = 'high' and churn_risk_score between 61 and 80)
+            or (churn_risk_level = 'critical' and churn_risk_score > 80)
